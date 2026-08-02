@@ -3,7 +3,7 @@ import time
 import json
 import re
 import logging
-from utils import strip_ansi
+from utils import strip_ansi, terminate_process_group
 from constants import TARGETS_FILE
 
 MAX_SCAN_TIME = 75  # seconds
@@ -43,11 +43,13 @@ def save_targets_to_file(targets):
 def scan_targets(interface):
     logging.info("Scanning for targets using wifite...")
 
+    proc = None
     try:
         proc = subprocess.Popen(
             ["script", "-q", "-c", f"wifite --wps-only --ignore-locks -i {interface}", "/dev/null"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1
+            text=True, bufsize=1,
+            start_new_session=True,
         )
 
         targets = {}
@@ -56,13 +58,6 @@ def scan_targets(interface):
         for line in iter(proc.stdout.readline, ""):
             if time.monotonic() - start_time > MAX_SCAN_TIME:
                 logging.warning(f"Scan timeout reached ({MAX_SCAN_TIME}s), terminating wifite.")
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    logging.error("Wifite did not terminate in time. Killing...")
-                    proc.kill()
-                    proc.wait()
                 break
 
             parsed = parse_wifite_line(line)
@@ -78,3 +73,6 @@ def scan_targets(interface):
     except Exception as e:
         logging.error(f"Failed to scan with wifite: {e}")
         return []
+    finally:
+        if proc is not None:
+            terminate_process_group(proc)

@@ -2,6 +2,7 @@ import os
 import subprocess
 import re
 import logging
+import signal
 from constants import (MAX_LOG_FILES, LOG_DIR)
 
 def setup_logging():
@@ -70,6 +71,53 @@ def clean_files(*files):
 
 def strip_ansi(text):
     return re.sub(r'\x1b\[[0-9;]*m', '', text)
+
+
+def _signal_process_group(process_group_id, signal_number):
+    try:
+        os.killpg(process_group_id, signal_number)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError as error:
+        logging.error(
+            "Unable to signal process group %s: %s",
+            process_group_id,
+            error,
+        )
+        return False
+
+
+def terminate_process_group(proc, grace_period=5):
+    """Terminate a subprocess and every descendant in its process group."""
+    process_group_id = proc.pid
+    if not _signal_process_group(process_group_id, signal.SIGTERM):
+        return
+
+    try:
+        proc.wait(timeout=grace_period)
+    except subprocess.TimeoutExpired:
+        logging.warning(
+            "Process group %s did not stop after %ss; sending SIGKILL.",
+            process_group_id,
+            grace_period,
+        )
+        _signal_process_group(process_group_id, signal.SIGKILL)
+        try:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            logging.error("Process group %s did not exit after SIGKILL.", process_group_id)
+        return
+
+    # The parent may exit before tools spawned by Wifite. Because every Wifite
+    # invocation starts a new session, its PID is also the stable process-group
+    # ID and can still be used to remove those remaining descendants.
+    if _signal_process_group(process_group_id, 0):
+        logging.warning(
+            "Process group %s still has descendants; sending SIGKILL.",
+            process_group_id,
+        )
+        _signal_process_group(process_group_id, signal.SIGKILL)
 
 def is_ssh_connected():
     try:

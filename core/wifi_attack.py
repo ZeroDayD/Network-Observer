@@ -6,7 +6,7 @@ import os
 import json
 import threading
 from constants import BASE_DIR, CRACKED_FILE, ATTACK_TIMEOUT
-from utils import strip_ansi
+from utils import strip_ansi, terminate_process_group
 
 WIFITE_ARGS = [
     "wifite",
@@ -37,8 +37,8 @@ def kill_proc_later(proc, timeout):
     def _kill():
         time.sleep(timeout)
         if proc.poll() is None:
-            logging.warning(f"Attack timeout ({timeout}s) reached — killing process.")
-            proc.terminate()
+            logging.warning(f"Attack timeout ({timeout}s) reached — killing process group.")
+            terminate_process_group(proc)
     threading.Thread(target=_kill, daemon=True).start()
 
 
@@ -52,7 +52,8 @@ def attack_target(interface, essid):
         WIFITE_ARGS + ["-i", interface, "-e", essid],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True
+        text=True,
+        start_new_session=True,
     )
 
     kill_proc_later(proc, ATTACK_TIMEOUT)
@@ -60,25 +61,26 @@ def attack_target(interface, essid):
     psk = None
     pin = None
 
-    for line in proc.stdout:
-        line = strip_ansi(line.strip())
-        if not line:
-            continue
-        logging.debug(f"[wifite] {line}")
+    try:
+        for line in proc.stdout:
+            line = strip_ansi(line.strip())
+            if not line:
+                continue
+            logging.debug(f"[wifite] {line}")
 
-        if not psk:
-            psk = extract_psk(line)
-            if psk:
-                logging.info(f"PSK found for {essid}: {psk}")
-                break
+            if not psk:
+                psk = extract_psk(line)
+                if psk:
+                    logging.info(f"PSK found for {essid}: {psk}")
+                    break
 
-        if not pin:
-            maybe_pin = extract_pin(line)
-            if maybe_pin:
-                pin = maybe_pin
-                logging.info(f"WPS PIN found for {essid}: {pin}")
-
-    proc.terminate()
+            if not pin:
+                maybe_pin = extract_pin(line)
+                if maybe_pin:
+                    pin = maybe_pin
+                    logging.info(f"WPS PIN found for {essid}: {pin}")
+    finally:
+        terminate_process_group(proc)
 
     # Fallback: try to recover PSK from cracked.json
     if pin and not psk and CRACKED_FILE.exists():
