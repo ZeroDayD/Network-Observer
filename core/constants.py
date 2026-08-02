@@ -11,10 +11,7 @@ with open(CONFIG_PATH) as f:
 TELEGRAM_TOKEN = config["telegram_token"]
 TELEGRAM_CHAT_ID = config["chat_id"]
 STOP_ON_SUCCESS = config.get("stop_on_success", True)
-SHUTDOWN_ON_COMPLETE = config.get("shutdown_on_complete", True)
 ATTACK_INTERFACE = config.get("attack_interface", "wlan1")
-MIN_SIGNAL_DBM = config.get("min_signal_dbm", -70)
-WPS_TIMEOUT = config.get("wps_timeout_sec", 300)
 ATTACK_TIMEOUT = config.get("attack_timeout_sec", 360)
 MAX_RUNTIME = config.get("max_runtime_sec", 1800)
 ENABLE_NMAP_SCAN = config.get("enable_nmap_scan", False)

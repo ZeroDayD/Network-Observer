@@ -7,6 +7,7 @@ from utils import strip_ansi, terminate_process_group
 from constants import TARGETS_FILE
 
 MAX_SCAN_TIME = 75  # seconds
+MAC_LIKE_TARGET = re.compile(r"^\(?([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\)?$")
 
 def parse_wifite_line(line):
     line = strip_ansi(line.strip())
@@ -23,6 +24,9 @@ def parse_wifite_line(line):
         return None
 
     essid = match.group("essid").strip()
+    if MAC_LIKE_TARGET.fullmatch(essid):
+        logging.debug("Ignoring MAC-like client row: %s", essid)
+        return None
     try:
         power = int(match.group("pwr"))
         return essid, power
