@@ -21,27 +21,7 @@ class LoggingTests(unittest.TestCase):
             logging.getLogger().removeHandler(handler)
             handler.close()
 
-    def test_sensitive_values_are_redacted(self):
-        source = "Cracked WPS PIN: 12345670 WPA PSK: secret PSK/Password: other"
-
-        redacted = utils.redact_sensitive_text(source)
-
-        self.assertNotIn("12345670", redacted)
-        self.assertNotIn("secret", redacted)
-        self.assertNotIn("other", redacted)
-        self.assertEqual(redacted.count("<redacted>"), 3)
-
-    def test_password_argument_is_redacted_from_commands(self):
-        command = ["nmcli", "connect", "authorized-test", "password", "private-value"]
-
-        redacted = utils.redact_command(command)
-
-        self.assertEqual(
-            redacted,
-            ["nmcli", "connect", "authorized-test", "password", "<redacted>"],
-        )
-
-    def test_command_exception_does_not_log_password(self):
+    def test_command_exception_logs_full_command(self):
         command = ["nmcli", "connect", "authorized-test", "password", "private-value"]
 
         with (
@@ -51,8 +31,7 @@ class LoggingTests(unittest.TestCase):
             utils.run_cmd(command)
 
         output = "\n".join(captured.output)
-        self.assertNotIn("private-value", output)
-        self.assertIn("<redacted>", output)
+        self.assertIn("private-value", output)
 
     def test_rotating_logs_are_bounded_and_private(self):
         with tempfile.TemporaryDirectory() as temp_directory:

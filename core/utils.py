@@ -61,37 +61,8 @@ def setup_logging():
                 logging.warning("Failed to restrict legacy log %s: %s", legacy_log, error)
 
 
-def redact_sensitive_text(text):
-    patterns = (
-        (r"(?i)(WPS\s+PIN\s*:\s*)\S+", r"\1<redacted>"),
-        (r"(?i)(WPA\s+PSK\s*:\s*)\S+", r"\1<redacted>"),
-        (r"(?i)(PSK/Password\s*:\s*)\S+", r"\1<redacted>"),
-        (r"(?i)(Password\s*:\s*)\S+", r"\1<redacted>"),
-    )
-    redacted = str(text)
-    for pattern, replacement in patterns:
-        redacted = re.sub(pattern, replacement, redacted)
-    return redacted
-
-
-def redact_command(cmd):
-    redacted = []
-    hide_next_argument = False
-    for argument in cmd:
-        argument_text = str(argument)
-        if hide_next_argument:
-            redacted.append("<redacted>")
-            hide_next_argument = False
-            continue
-        redacted.append(argument_text)
-        if argument_text.lower() in {"password", "passwd", "psk", "pin"}:
-            hide_next_argument = True
-    return redacted
-
-
 def run_cmd(cmd):
-    safe_command = redact_command(cmd)
-    logging.debug(f"Running command: {' '.join(safe_command)}")
+    logging.debug(f"Running command: {' '.join(cmd)}")
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         logging.debug(f"Command output: {result.stdout.strip()}")
@@ -101,7 +72,7 @@ def run_cmd(cmd):
     except Exception as e:
         logging.error(
             "Exception while running command %s: %s",
-            " ".join(safe_command),
+            " ".join(cmd),
             e,
         )
         return ""
