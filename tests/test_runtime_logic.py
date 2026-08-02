@@ -60,13 +60,35 @@ class WifiConnectionTests(unittest.TestCase):
         password_index = connect_command.index("password") + 1
         self.assertEqual(connect_command[password_index], "private-psk")
 
+    @mock.patch("wifi_connect.time.sleep")
     @mock.patch("wifi_connect.run_cmd")
-    def test_pin_without_recovered_psk_is_not_used_as_password(self, run_cmd):
-        self.assertFalse(
-            wifi_connect.connect_to_wifi("authorized-test", pin="12345670")
+    def test_pin_is_used_when_psk_is_unavailable(self, run_cmd, _sleep):
+        run_cmd.side_effect = [
+            "",
+            "",
+            "",
+            "",
+            "authorized-test",
+            "",
+            "",
+            "",
+            "success",
+            "inet 192.0.2.2/24",
+        ]
+
+        connected = wifi_connect.connect_to_wifi(
+            "authorized-test",
+            pin="12345670",
         )
 
-        run_cmd.assert_not_called()
+        self.assertTrue(connected)
+        connect_command = next(
+            call.args[0]
+            for call in run_cmd.call_args_list
+            if call.args[0][:4] == ["nmcli", "device", "wifi", "connect"]
+        )
+        password_index = connect_command.index("password") + 1
+        self.assertEqual(connect_command[password_index], "12345670")
 
     @mock.patch("wifi_connect.subprocess.run")
     def test_startup_disconnect_preserves_saved_profiles(self, run):

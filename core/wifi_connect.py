@@ -6,15 +6,8 @@ from constants import ATTACK_INTERFACE
 
 
 def connect_to_wifi(essid, pin=None, psk=None):
-    if not psk:
-        if pin:
-            logging.warning(
-                "WPS PIN found for %s, but no WPA PSK was recovered; "
-                "nmcli cannot use a WPS PIN as a Wi-Fi password.",
-                essid,
-            )
-        else:
-            logging.warning("No WPA PSK available for %s.", essid)
+    if not psk and not pin:
+        logging.warning("No PSK or WPS PIN available for %s.", essid)
         return False
 
     logging.info("Preparing Wi-Fi interface...")
@@ -46,8 +39,9 @@ def connect_to_wifi(essid, pin=None, psk=None):
     run_cmd(["nmcli", "connection", "delete", f'"{essid}"'])
     run_cmd(["nmcli", "connection", "delete", f"'{essid}'"])
 
-    password = psk
-    logging.info("Attempting to connect using PSK...")
+    password = psk or pin
+    method = "PSK" if psk else "WPS PIN fallback"
+    logging.info("Attempting to connect using %s...", method)
 
     result = run_cmd([
         "nmcli", "device", "wifi", "connect", essid,
