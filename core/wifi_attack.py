@@ -6,7 +6,7 @@ import os
 import json
 import threading
 from constants import BASE_DIR, CRACKED_FILE, ATTACK_TIMEOUT
-from utils import strip_ansi, terminate_process_group
+from utils import redact_sensitive_text, strip_ansi, terminate_process_group
 
 WIFITE_ARGS = [
     "wifite",
@@ -66,19 +66,19 @@ def attack_target(interface, essid):
             line = strip_ansi(line.strip())
             if not line:
                 continue
-            logging.debug(f"[wifite] {line}")
+            logging.debug(f"[wifite] {redact_sensitive_text(line)}")
 
             if not psk:
                 psk = extract_psk(line)
                 if psk:
-                    logging.info(f"PSK found for {essid}: {psk}")
+                    logging.info(f"PSK found for {essid}.")
                     break
 
             if not pin:
                 maybe_pin = extract_pin(line)
                 if maybe_pin:
                     pin = maybe_pin
-                    logging.info(f"WPS PIN found for {essid}: {pin}")
+                    logging.info(f"WPS PIN found for {essid}.")
     finally:
         terminate_process_group(proc)
 
@@ -92,7 +92,7 @@ def attack_target(interface, essid):
                     recovered_psk = entry.get("psk")
                     if recovered_psk:
                         psk = recovered_psk
-                        logging.info(f"Recovered PSK from cracked.json for {essid}: {psk}")
+                        logging.info(f"Recovered PSK from cracked.json for {essid}.")
         except Exception as e:
             logging.warning(f"Failed to parse cracked.json: {e}")
 

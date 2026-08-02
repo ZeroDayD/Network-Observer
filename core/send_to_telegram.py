@@ -24,7 +24,10 @@ def send_message(message, prefix="[nmap scan result]"):
             else:
                 logging.error(f"Failed to send message. HTTP {response.status_code}: {response.text}")
         except Exception as e:
-            logging.exception(f"Exception while sending Telegram message: {e}")
+            # requests exceptions can include the request URL, which contains
+            # the bot token for Telegram API calls.
+            safe_error = str(e).replace(TELEGRAM_TOKEN, "<redacted>")
+            logging.exception("Exception while sending Telegram message: %s", safe_error)
 
     if len(f"{prefix}\n```{message}```") <= 4096:
         send_chunk(message)

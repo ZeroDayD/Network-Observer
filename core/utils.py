@@ -3,51 +3,95 @@ import subprocess
 import re
 import logging
 import signal
-from constants import (MAX_LOG_FILES, LOG_DIR)
+from logging.handlers import RotatingFileHandler
+from constants import (MAX_LOG_FILES, MAX_LOG_FILE_SIZE_KB, LOG_DIR)
+
+
+class SecureRotatingFileHandler(RotatingFileHandler):
+    def _open(self):
+        file_descriptor = os.open(
+            self.baseFilename,
+            os.O_WRONLY | os.O_APPEND | os.O_CREAT,
+            0o600,
+        )
+        return os.fdopen(
+            file_descriptor,
+            self.mode,
+            encoding=self.encoding,
+            errors=self.errors,
+        )
+
 
 def setup_logging():
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR)
+    os.makedirs(LOG_DIR, mode=0o700, exist_ok=True)
+    os.chmod(LOG_DIR, 0o700)
 
-    # find the last log file index
-    existing_logs = [
-        f for f in os.listdir(LOG_DIR)
-        if f.startswith("log_") and f.endswith(".log")
-    ]
-    if existing_logs:
-        existing_logs.sort()
-        last_log = existing_logs[-1]
-        try:
-            last_index = int(last_log.split("_")[1].split(".")[0])
-        except (IndexError, ValueError):
-            last_index = -1
-    else:
-        last_index = -1
+    log_file = os.path.join(LOG_DIR, "log_current.log")
+    retained_file_count = max(2, int(MAX_LOG_FILES))
+    max_log_bytes = max(1, int(MAX_LOG_FILE_SIZE_KB)) * 1024
 
-    next_index = last_index + 1
-    log_file = os.path.join(LOG_DIR, f"log_{next_index}.log")
+    file_handler = SecureRotatingFileHandler(
+        log_file,
+        maxBytes=max_log_bytes,
+        backupCount=retained_file_count - 1,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.DEBUG)
 
-    # remove old logs if we exceed the maximum number
-    while len(existing_logs) >= MAX_LOG_FILES:
-        oldest = existing_logs.pop(0)
-        try:
-            os.remove(os.path.join(LOG_DIR, oldest))
-        except Exception as e:
-            print(f"Failed to delete old log {oldest}: {e}")
+    journal_handler = logging.StreamHandler()
+    journal_handler.setLevel(logging.INFO)
 
-    # configure logging
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    file_handler.setFormatter(formatter)
+    journal_handler.setFormatter(formatter)
+
     logging.basicConfig(
         level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
+        handlers=[file_handler, journal_handler],
+        force=True,
     )
+
+    # Legacy indexed logs are retained for manual review, but their historical
+    # sensitive contents should no longer be world-readable.
+    for legacy_log in os.listdir(LOG_DIR):
+        if legacy_log.startswith("log_") and legacy_log.endswith(".log"):
+            try:
+                os.chmod(os.path.join(LOG_DIR, legacy_log), 0o600)
+            except OSError as error:
+                logging.warning("Failed to restrict legacy log %s: %s", legacy_log, error)
+
+
+def redact_sensitive_text(text):
+    patterns = (
+        (r"(?i)(WPS\s+PIN\s*:\s*)\S+", r"\1<redacted>"),
+        (r"(?i)(WPA\s+PSK\s*:\s*)\S+", r"\1<redacted>"),
+        (r"(?i)(PSK/Password\s*:\s*)\S+", r"\1<redacted>"),
+        (r"(?i)(Password\s*:\s*)\S+", r"\1<redacted>"),
+    )
+    redacted = str(text)
+    for pattern, replacement in patterns:
+        redacted = re.sub(pattern, replacement, redacted)
+    return redacted
+
+
+def redact_command(cmd):
+    redacted = []
+    hide_next_argument = False
+    for argument in cmd:
+        argument_text = str(argument)
+        if hide_next_argument:
+            redacted.append("<redacted>")
+            hide_next_argument = False
+            continue
+        redacted.append(argument_text)
+        if argument_text.lower() in {"password", "passwd", "psk", "pin"}:
+            hide_next_argument = True
+    return redacted
 
 
 def run_cmd(cmd):
-    logging.debug(f"Running command: {' '.join(cmd)}")
+    safe_command = redact_command(cmd)
+    logging.debug(f"Running command: {' '.join(safe_command)}")
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         logging.debug(f"Command output: {result.stdout.strip()}")
@@ -55,7 +99,11 @@ def run_cmd(cmd):
             logging.debug(f"Command error output: {result.stderr.strip()}")
         return result.stdout.strip()
     except Exception as e:
-        logging.error(f"Exception while running command {' '.join(cmd)}: {e}")
+        logging.error(
+            "Exception while running command %s: %s",
+            " ".join(safe_command),
+            e,
+        )
         return ""
 
 

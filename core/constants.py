@@ -19,6 +19,7 @@ ATTACK_TIMEOUT = config.get("attack_timeout_sec", 360)
 MAX_RUNTIME = config.get("max_runtime_sec", 1800)
 ENABLE_NMAP_SCAN = config.get("enable_nmap_scan", False)
 MAX_LOG_FILES = config.get("max_log_files", 5)
+MAX_LOG_FILE_SIZE_KB = config.get("max_log_file_size_kb", 512)
 
 ENABLE_LLM_ANALYSIS = config.get("enable_llm_analysis", False)
 
