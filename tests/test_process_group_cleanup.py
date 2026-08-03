@@ -116,6 +116,32 @@ class ProcessGroupCleanupTests(unittest.TestCase):
         terminate_group.assert_called_once_with(proc)
         _kill_later.return_value.cancel.assert_called_once_with()
 
+    @mock.patch("wifi_attack.terminate_process_group")
+    @mock.patch("wifi_attack.kill_proc_later")
+    @mock.patch("wifi_attack.subprocess.Popen")
+    @mock.patch("wifi_attack.os.chdir")
+    def test_attack_targets_specific_bssid(
+        self,
+        _change_directory,
+        popen,
+        _kill_later,
+        _terminate_group,
+    ):
+        proc = mock.Mock()
+        proc.stdout = []
+        popen.return_value = proc
+
+        wifi_attack.attack_target(
+            "wlan1",
+            "authorized-test",
+            bssid="AA:BB:CC:DD:EE:FF",
+        )
+
+        command = popen.call_args.args[0]
+        self.assertIn("-b", command)
+        self.assertEqual(command[command.index("-b") + 1], "AA:BB:CC:DD:EE:FF")
+        self.assertNotIn("-e", command)
+
     @mock.patch("wifi_scan.terminate_process_group")
     @mock.patch("wifi_scan.save_targets_to_file")
     @mock.patch("wifi_scan.subprocess.Popen")
@@ -132,6 +158,7 @@ class ProcessGroupCleanupTests(unittest.TestCase):
         self.assertEqual(wifi_scan.scan_targets("wlan1"), [])
 
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
+        self.assertIn("--showb", popen.call_args.args[0][3])
         terminate_group.assert_called_once_with(proc)
 
     @mock.patch("wifi_scan.save_targets_to_file")
@@ -161,6 +188,31 @@ class ProcessGroupCleanupTests(unittest.TestCase):
 
         self.assertLess(time.monotonic() - started, 0.5)
         terminate_group.assert_called_once_with(proc)
+
+    @mock.patch("wifi_scan.terminate_process_group")
+    @mock.patch("wifi_scan.save_targets_to_file")
+    @mock.patch("wifi_scan.subprocess.Popen")
+    def test_scan_keeps_same_ssid_on_distinct_bssids(
+        self,
+        popen,
+        _save_targets,
+        _terminate_group,
+    ):
+        proc = mock.Mock()
+        proc.stdout.readline.side_effect = [
+            "1 authorized-test AA:BB:CC:DD:EE:01 6 WPA-P 72db yes 1\n",
+            "2 authorized-test AA:BB:CC:DD:EE:02 11 WPA-P 65db yes 0\n",
+            "",
+        ]
+        popen.return_value = proc
+
+        targets = wifi_scan.scan_targets("wlan1")
+
+        self.assertEqual(len(targets), 2)
+        self.assertEqual(
+            {target["bssid"] for target in targets},
+            {"AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02"},
+        )
 
 
 if __name__ == "__main__":

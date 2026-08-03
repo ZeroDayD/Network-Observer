@@ -5,7 +5,10 @@
   "attack_interface": "wlan1",
   "attack_timeout_sec": 360,
   "max_runtime_sec": 1800,
+  "skip_ssids": [],
+  "skip_bssids": [],
   "enable_nmap_scan": true,
   "max_log_files": 5,
-  "enable_llm_analysis": true
+  "enable_llm_analysis": false,
+  "llm_model": ""
 }

@@ -5,7 +5,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'core'))
 
-from nmap_scan import get_llm_attack_insights
+from llm_analysis import get_llm_attack_insights
 
 # Sample nmap output for testing
 test_nmap_output = """
@@ -40,4 +40,4 @@ if __name__ == "__main__":
         print(f"Result length: {len(result)} characters")
     else:
         print("❌ LLM analysis failed or returned empty result")
-        print("Check if ENABLE_LLM_ANALYSIS is True and LLM_API_KEY is set in config.json")
+        print("Check that enable_llm_analysis is true and llm_model is explicitly configured")
