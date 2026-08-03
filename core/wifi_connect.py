@@ -5,7 +5,7 @@ from utils import run_cmd
 from constants import ATTACK_INTERFACE
 
 
-def connect_to_wifi(essid, pin=None, psk=None):
+def connect_to_wifi(essid, bssid=None, pin=None, psk=None):
     if not psk and not pin:
         logging.warning("No PSK or WPS PIN available for %s.", essid)
         return False
@@ -19,15 +19,23 @@ def connect_to_wifi(essid, pin=None, psk=None):
     logging.info("Triggering initial Wi-Fi rescan...")
     run_cmd(["nmcli", "device", "wifi", "rescan"])
 
-    logging.info(f"Looking for SSID: {essid}")
+    scan_field = "BSSID" if bssid else "SSID"
+    expected_target = bssid.upper() if bssid else essid
+    logging.info("Looking for authorized target: %s", essid)
     for attempt in range(15):
         scan_output = run_cmd([
-            "nmcli", "-t", "-f", "SSID", "device", "wifi", "list",
+            "nmcli", "-t", "--escape", "no", "-f", scan_field,
+            "device", "wifi", "list",
             "ifname", ATTACK_INTERFACE
         ])
         logging.debug(f"Scan result (attempt {attempt + 1}): {scan_output}")
-        if essid in scan_output:
-            logging.info(f"SSID {essid} found.")
+        available_targets = {
+            line.strip().upper() if bssid else line.strip()
+            for line in scan_output.splitlines()
+            if line.strip()
+        }
+        if expected_target in available_targets:
+            logging.info("Authorized target %s found.", essid)
             break
         time.sleep(5)
     else:
@@ -43,8 +51,9 @@ def connect_to_wifi(essid, pin=None, psk=None):
     method = "PSK" if psk else "WPS PIN fallback"
     logging.info("Attempting to connect using %s...", method)
 
+    connection_target = bssid or essid
     result = run_cmd([
-        "nmcli", "device", "wifi", "connect", essid,
+        "nmcli", "device", "wifi", "connect", connection_target,
         "password", password,
         "ifname", ATTACK_INTERFACE
     ])
@@ -67,19 +76,38 @@ def connect_to_wifi(essid, pin=None, psk=None):
 
 def disconnect_all_wifi_devices():
     try:
-        # Preserve saved profiles and only disconnect active Wi-Fi devices.
-        result = subprocess.run(
+        device_result = subprocess.run(
             ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device"],
             stdout=subprocess.PIPE,
             text=True,
             check=True
         )
 
-        for line in result.stdout.strip().split("\n"):
+        for line in device_result.stdout.strip().split("\n"):
             if ":wifi:connected" in line:
                 device = line.split(":")[0]
                 subprocess.run(["nmcli", "device", "disconnect", device], check=False)
                 logging.info(f"Disconnected Wi-Fi device: {device}")
 
+        connection_result = subprocess.run(
+            ["nmcli", "-t", "-f", "UUID,TYPE", "connection", "show"],
+            stdout=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
+        for line in connection_result.stdout.strip().splitlines():
+            try:
+                connection_uuid, connection_type = line.split(":", 1)
+            except ValueError:
+                logging.debug("Ignoring malformed NetworkManager profile row.")
+                continue
+            if connection_type not in {"802-11-wireless", "wifi"}:
+                continue
+            subprocess.run(
+                ["nmcli", "connection", "delete", "uuid", connection_uuid],
+                check=False,
+            )
+            logging.info("Deleted saved wireless profile before fresh scan.")
+
     except Exception as e:
-        logging.warning(f"Failed to disconnect active Wi-Fi devices: {e}")
+        logging.warning(f"Failed to reset Wi-Fi connections: {e}")

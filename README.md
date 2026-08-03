@@ -10,13 +10,32 @@ A lightweight automated tool for wireless network reconnaissance and WPS-based a
 ## Features
 
 - Passive Wi-Fi scan for nearby access points
-- Target filtering based on signal strength
+- Per-BSSID targeting and exact SSID/BSSID exclusion lists
 - WPS PIN/PSK attacks using [Wifite2](https://github.com/kimocoder/wifite2) internal logic
 - Automatic connection to compromised networks
 - Telegram alert with credentials (PSK or WPS PIN)
 - Auto-shutdown or persistent mode (depends on ssh connection)
 - Systemd-compatible for headless deployment
 - SSH session detection to prevent shutdown while connected
+
+Each run deliberately disconnects Wi-Fi and removes saved NetworkManager
+wireless profiles before discovery. This prevents automatic reuse of a known
+access point and ensures discovery, credential recovery, and connection begin
+from a clean state. Ethernet profiles are not removed.
+
+## Configuration notes
+
+- `skip_ssids` and `skip_bssids` are exact-match exclusion lists and default to
+  empty arrays. BSSIDs are matched case-insensitively.
+- Discovered targets retain SSID, BSSID, channel, and signal strength. Wifite
+  and NetworkManager receive the BSSID so identically named access points are
+  not conflated.
+- Nmap uses the actual IPv4 prefix assigned by NetworkManager instead of
+  assuming `/24`.
+- LLM analysis is disabled by default. Enabling it also requires an explicit
+  non-empty `llm_model`; Nmap collection does not depend on the LLM component.
+- Telegram output removes ANSI/control noise, duplicate consecutive lines, and
+  common scanner boilerplate before HTML-safe bounded chunking.
 
 ---
 
