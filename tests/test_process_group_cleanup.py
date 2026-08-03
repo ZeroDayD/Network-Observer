@@ -2,6 +2,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -131,6 +132,34 @@ class ProcessGroupCleanupTests(unittest.TestCase):
         self.assertEqual(wifi_scan.scan_targets("wlan1"), [])
 
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
+        terminate_group.assert_called_once_with(proc)
+
+    @mock.patch("wifi_scan.save_targets_to_file")
+    @mock.patch("wifi_scan.subprocess.Popen")
+    def test_scan_timeout_does_not_depend_on_stdout_activity(
+        self,
+        popen,
+        _save_targets,
+    ):
+        output_released = threading.Event()
+        proc = mock.Mock()
+        proc.poll.return_value = None
+        proc.stdout.readline.side_effect = lambda: (
+            output_released.wait(timeout=1) and ""
+        )
+        popen.return_value = proc
+
+        def release_blocked_output(_proc):
+            output_released.set()
+
+        started = time.monotonic()
+        with mock.patch(
+            "wifi_scan.terminate_process_group",
+            side_effect=release_blocked_output,
+        ) as terminate_group:
+            self.assertEqual(wifi_scan.scan_targets("wlan1", timeout=0.02), [])
+
+        self.assertLess(time.monotonic() - started, 0.5)
         terminate_group.assert_called_once_with(proc)
 
 
