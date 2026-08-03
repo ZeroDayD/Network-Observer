@@ -13,6 +13,11 @@ Environment=LINES=24
 ExecStartPre=/bin/sleep 5
 ExecStart=/usr/bin/python3 /home/pi/networkObserver/core/main.py
 
+# Last-resort ceiling if the application-level runtime guard cannot unwind.
+# Keep this above max_runtime_sec so the normal shutdown decision still runs.
+RuntimeMaxSec=45min
+TimeoutStopSec=15s
+KillMode=control-group
 Restart=no
 
 [Install]

@@ -68,7 +68,17 @@ Environment=LINES=24
 ExecStartPre=/bin/sleep 5
 ExecStart=/usr/bin/python3 /home/pi/networkObserver/core/main.py
 
-Restart=no 
+# Last-resort ceiling above the default 30-minute application limit.
+RuntimeMaxSec=45min
+TimeoutStopSec=15s
+KillMode=control-group
+Restart=no
 
 [Install]
 WantedBy=multi-user.target
+```
+
+`max_runtime_sec` is enforced inside the Python process as a wall-clock limit,
+including a stage blocked on subprocess output. The systemd limit is a final
+safety net and should remain higher than the configured application limit so
+normal cleanup and the SSH-aware shutdown decision can run.
