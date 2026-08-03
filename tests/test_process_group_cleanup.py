@@ -1,6 +1,7 @@
 import signal
 import subprocess
 import sys
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -15,6 +16,42 @@ import wifi_scan
 
 
 class ProcessGroupCleanupTests(unittest.TestCase):
+    @mock.patch("wifi_attack.terminate_process_group")
+    def test_attack_cleanup_runs_only_once(self, terminate_group):
+        proc = mock.Mock()
+        cleanup = wifi_attack.ProcessGroupCleanup(proc)
+
+        self.assertTrue(cleanup.run(timeout=360))
+        self.assertFalse(cleanup.run())
+
+        terminate_group.assert_called_once_with(proc)
+
+    @mock.patch("wifi_attack.terminate_process_group")
+    def test_duplicate_cleanup_waits_for_first_cleanup(self, terminate_group):
+        cleanup_started = threading.Event()
+        allow_cleanup_to_finish = threading.Event()
+
+        def block_cleanup(_proc):
+            cleanup_started.set()
+            allow_cleanup_to_finish.wait(timeout=1)
+
+        terminate_group.side_effect = block_cleanup
+        cleanup = wifi_attack.ProcessGroupCleanup(mock.Mock())
+        first = threading.Thread(target=cleanup.run)
+        second = threading.Thread(target=cleanup.run)
+
+        first.start()
+        self.assertTrue(cleanup_started.wait(timeout=1))
+        second.start()
+        self.assertTrue(second.is_alive())
+        allow_cleanup_to_finish.set()
+        first.join(timeout=1)
+        second.join(timeout=1)
+
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        terminate_group.assert_called_once()
+
     @mock.patch("utils._signal_process_group")
     def test_terminate_process_group_uses_sigterm_when_group_exits(self, signal_group):
         proc = mock.Mock(pid=1234)
@@ -76,6 +113,7 @@ class ProcessGroupCleanupTests(unittest.TestCase):
 
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
         terminate_group.assert_called_once_with(proc)
+        _kill_later.return_value.cancel.assert_called_once_with()
 
     @mock.patch("wifi_scan.terminate_process_group")
     @mock.patch("wifi_scan.save_targets_to_file")

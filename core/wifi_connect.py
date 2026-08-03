@@ -1,10 +1,15 @@
 import time
 import logging
+import subprocess
 from utils import run_cmd
 from constants import ATTACK_INTERFACE
 
 
 def connect_to_wifi(essid, pin=None, psk=None):
+    if not psk and not pin:
+        logging.warning("No PSK or WPS PIN available for %s.", essid)
+        return False
+
     logging.info("Preparing Wi-Fi interface...")
     run_cmd(["sudo", "ip", "link", "set", ATTACK_INTERFACE, "down"])
     run_cmd(["sudo", "iw", ATTACK_INTERFACE, "set", "type", "managed"])
@@ -34,9 +39,9 @@ def connect_to_wifi(essid, pin=None, psk=None):
     run_cmd(["nmcli", "connection", "delete", f'"{essid}"'])
     run_cmd(["nmcli", "connection", "delete", f"'{essid}'"])
 
-    password = pin or psk
-    method = "PIN" if pin else "PSK"
-    logging.info(f"Attempting to connect using {method}...")
+    password = psk or pin
+    method = "PSK" if psk else "WPS PIN fallback"
+    logging.info("Attempting to connect using %s...", method)
 
     result = run_cmd([
         "nmcli", "device", "wifi", "connect", essid,
@@ -60,30 +65,9 @@ def connect_to_wifi(essid, pin=None, psk=None):
         return False
 
 
-def delete_all_wifi_connections():
-    import subprocess
-    import logging
-
+def disconnect_all_wifi_devices():
     try:
-        # Delete all saved Wi-Fi connections
-        result = subprocess.run(
-            ["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"],
-            stdout=subprocess.PIPE,
-            text=True,
-            check=True
-        )
-        deleted_any = False
-        for line in result.stdout.strip().split("\n"):
-            if ":wifi" in line:
-                conn_name = line.split(":")[0]
-                subprocess.run(["nmcli", "connection", "delete", conn_name], check=False)
-                logging.info(f"Deleted saved Wi-Fi connection: {conn_name}")
-                deleted_any = True
-
-        if not deleted_any:
-            logging.info("No saved Wi-Fi connections to delete.")
-
-        # Delete all active Wi-Fi connections
+        # Preserve saved profiles and only disconnect active Wi-Fi devices.
         result = subprocess.run(
             ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device"],
             stdout=subprocess.PIPE,
@@ -98,4 +82,4 @@ def delete_all_wifi_connections():
                 logging.info(f"Disconnected Wi-Fi device: {device}")
 
     except Exception as e:
-        logging.warning(f"Failed to clean/disconnect Wi-Fi connections: {e}")
+        logging.warning(f"Failed to disconnect active Wi-Fi devices: {e}")

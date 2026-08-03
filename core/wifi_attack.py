@@ -1,5 +1,4 @@
 import subprocess
-import time
 import re
 import logging
 import os
@@ -33,13 +32,46 @@ def extract_pin(line):
     return None
 
 
-def kill_proc_later(proc, timeout):
+class ProcessGroupCleanup:
+    def __init__(self, proc):
+        self.proc = proc
+        self._lock = threading.Lock()
+        self._started = False
+        self._finished = threading.Event()
+
+    def run(self, timeout=None):
+        with self._lock:
+            if self._started:
+                wait_for_cleanup = True
+            else:
+                self._started = True
+                wait_for_cleanup = False
+
+        if wait_for_cleanup:
+            self._finished.wait()
+            return False
+
+        try:
+            if timeout is not None:
+                logging.warning(
+                    "Attack timeout (%ss) reached — killing process group.",
+                    timeout,
+                )
+            terminate_process_group(self.proc)
+        finally:
+            self._finished.set()
+        return True
+
+
+def kill_proc_later(proc, timeout, cleanup):
     def _kill():
-        time.sleep(timeout)
         if proc.poll() is None:
-            logging.warning(f"Attack timeout ({timeout}s) reached — killing process group.")
-            terminate_process_group(proc)
-    threading.Thread(target=_kill, daemon=True).start()
+            cleanup.run(timeout=timeout)
+
+    timer = threading.Timer(timeout, _kill)
+    timer.daemon = True
+    timer.start()
+    return timer
 
 
 def attack_target(interface, essid):
@@ -56,7 +88,8 @@ def attack_target(interface, essid):
         start_new_session=True,
     )
 
-    kill_proc_later(proc, ATTACK_TIMEOUT)
+    cleanup = ProcessGroupCleanup(proc)
+    timeout_timer = kill_proc_later(proc, ATTACK_TIMEOUT, cleanup)
 
     psk = None
     pin = None
@@ -80,7 +113,8 @@ def attack_target(interface, essid):
                     pin = maybe_pin
                     logging.info(f"WPS PIN found for {essid}: {pin}")
     finally:
-        terminate_process_group(proc)
+        timeout_timer.cancel()
+        cleanup.run()
 
     # Fallback: try to recover PSK from cracked.json
     if pin and not psk and CRACKED_FILE.exists():

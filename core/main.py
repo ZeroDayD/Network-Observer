@@ -8,7 +8,7 @@ from utils import (
 )
 from wifi_scan import scan_targets
 from wifi_attack import attack_target
-from wifi_connect import connect_to_wifi, delete_all_wifi_connections
+from wifi_connect import connect_to_wifi, disconnect_all_wifi_devices
 from send_to_telegram import send_message
 from nmap_scan import run_nmap_scan, get_wifi_ip, clean_nmap_output, get_llm_attack_insights
 from constants import (
@@ -29,9 +29,9 @@ logging.info("Starting networkObserver")
 # Set global timer after time sync
 global_start_time = time.monotonic()
 
-# Clean up Wi-Fi state
-delete_all_wifi_connections()
-logging.info("Disconnected all previous Wi-Fi connections.")
+# Disconnect Wi-Fi without deleting saved NetworkManager profiles.
+disconnect_all_wifi_devices()
+logging.info("Disconnected active Wi-Fi devices.")
 
 # Clean temp files
 clean_files(TARGETS_FILE, CRACKED_FILE, PCAP_FILE)
