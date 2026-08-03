@@ -31,7 +31,11 @@ class TelegramFormattingTests(unittest.TestCase):
         post.return_value.text = "ok"
         message = "<&>" * 5000
 
-        self.assertTrue(send_to_telegram.send_message(message, prefix="<result>"))
+        with (
+            mock.patch.object(send_to_telegram, "TELEGRAM_TOKEN", "test-token"),
+            mock.patch.object(send_to_telegram, "TELEGRAM_CHAT_ID", "test-chat"),
+        ):
+            self.assertTrue(send_to_telegram.send_message(message, prefix="<result>"))
         self.assertGreater(post.call_count, 1)
         for call in post.call_args_list:
             payload = call.kwargs["data"]
@@ -39,6 +43,16 @@ class TelegramFormattingTests(unittest.TestCase):
             self.assertLessEqual(len(payload["text"]), 4096)
             self.assertIn("&lt;", payload["text"])
             self.assertNotIn("<result>", payload["text"])
+
+    @mock.patch("send_to_telegram.requests.post")
+    def test_missing_environment_settings_prevent_request(self, post):
+        with (
+            mock.patch.object(send_to_telegram, "TELEGRAM_TOKEN", ""),
+            mock.patch.object(send_to_telegram, "TELEGRAM_CHAT_ID", ""),
+        ):
+            self.assertFalse(send_to_telegram.send_message("result"))
+
+        post.assert_not_called()
 
 
 if __name__ == "__main__":
