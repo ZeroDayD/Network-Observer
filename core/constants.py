@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = BASE_DIR / "config.json"
@@ -8,8 +9,8 @@ with open(CONFIG_PATH) as f:
     config = json.load(f)
 
 # Config values
-TELEGRAM_TOKEN = config["telegram_token"]
-TELEGRAM_CHAT_ID = config["chat_id"]
+TELEGRAM_TOKEN = os.environ.get("NETWORK_OBSERVER_TELEGRAM_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("NETWORK_OBSERVER_TELEGRAM_CHAT_ID", "").strip()
 STOP_ON_SUCCESS = config.get("stop_on_success", True)
 ATTACK_INTERFACE = config.get("attack_interface", "wlan1")
 ATTACK_TIMEOUT = config.get("attack_timeout_sec", 360)

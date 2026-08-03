@@ -25,6 +25,8 @@ from a clean state. Ethernet profiles are not removed.
 
 ## Configuration notes
 
+- `config.json` contains only non-secret runtime behavior. Telegram credentials
+  are read exclusively from the service environment.
 - `skip_ssids` and `skip_bssids` are exact-match exclusion lists and default to
   empty arrays. BSSIDs are matched case-insensitively.
 - Discovered targets retain SSID, BSSID, channel, and signal strength. Wifite
@@ -69,6 +71,18 @@ sudo apt install -y \
 
 ## 🔧 Example systemd service
 
+Create the root-only Telegram environment file before enabling the service:
+
+```bash
+sudo install -d -o root -g root -m 0700 /etc/networkobserver
+sudo install -o root -g root -m 0600 .env.example /etc/networkobserver/telegram.env
+sudoedit /etc/networkobserver/telegram.env
+```
+
+Replace the two placeholders in the installed file. Keep real values out of
+the repository, shell command line, and shell history. After rotation, edit the
+same installed file and restart the service only when a new run is intended.
+
 To automatically run `networkObserver` on boot via `systemd`, you can create a service like this:
 
 ```ini
@@ -84,6 +98,7 @@ Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=TERM=xterm
 Environment=COLUMNS=80
 Environment=LINES=24
+EnvironmentFile=/etc/networkobserver/telegram.env
 ExecStartPre=/bin/sleep 5
 ExecStart=/usr/bin/python3 /home/pi/networkObserver/core/main.py
 

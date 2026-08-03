@@ -10,6 +10,7 @@ Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=TERM=xterm
 Environment=COLUMNS=80
 Environment=LINES=24
+EnvironmentFile=/etc/networkobserver/telegram.env
 ExecStartPre=/bin/sleep 5
 ExecStart=/usr/bin/python3 /home/pi/networkObserver/core/main.py
 

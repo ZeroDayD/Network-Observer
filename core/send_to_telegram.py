@@ -70,7 +70,7 @@ def _escaped_chunks(message, escaped_prefix):
 
 def send_message(message, prefix="[nmap scan result]"):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        logging.error("Missing 'telegram_token' or 'chat_id' in config.json")
+        logging.error("Missing Telegram settings in the service environment.")
         return False
 
     cleaned_message = clean_message(message)

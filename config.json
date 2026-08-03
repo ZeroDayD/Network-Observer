@@ -1,6 +1,4 @@
 {
-  "telegram_token": "YOUR_TOKEN",
-  "chat_id": "YOUR_CHAT_ID",
   "stop_on_success": true,
   "attack_interface": "wlan1",
   "attack_timeout_sec": 360,
